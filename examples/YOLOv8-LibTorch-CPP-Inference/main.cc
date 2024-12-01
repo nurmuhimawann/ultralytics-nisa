@@ -139,7 +139,7 @@ torch::Tensor nms(const torch::Tensor& bboxes, const torch::Tensor& scores, floa
 }
 
 
-torch::Tensor non_max_suppression(torch::Tensor& prediction, float conf_thres = 0.25, float iou_thres = 0.45, int max_det = 300) {
+torch::Tensor non_max_supperession(torch::Tensor& prediction, float conf_thres = 0.25, float iou_thres = 0.45, int max_det = 300) {
     auto bs = prediction.size(0);
     auto nc = prediction.size(1) - 4;
     auto nm = prediction.size(1) - nc - 4;
@@ -226,7 +226,6 @@ int main() {
         cv::Mat image = cv::imread("/path/to/bus.jpg");
         cv::Mat input_image;
         letterbox(image, input_image, {640, 640});
-        cv::cvtColor(input_image, input_image, cv::COLOR_BGR2RGB);
 
         torch::Tensor image_tensor = torch::from_blob(input_image.data, {input_image.rows, input_image.cols, 3}, torch::kByte).to(device);
         image_tensor = image_tensor.toType(torch::kFloat32).div(255);
@@ -238,7 +237,7 @@ int main() {
         torch::Tensor output = yolo_model.forward(inputs).toTensor().cpu();
 
         // NMS
-        auto keep = non_max_suppression(output)[0];
+        auto keep = non_max_supperession(output)[0];
         auto boxes = keep.index({Slice(), Slice(None, 4)});
         keep.index_put_({Slice(), Slice(None, 4)}, scale_boxes({input_image.rows, input_image.cols}, boxes, {image.rows, image.cols}));
 
