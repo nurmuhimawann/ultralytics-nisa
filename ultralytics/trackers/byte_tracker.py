@@ -45,7 +45,6 @@ class STrack(BaseTrack):
 
     def __init__(self, tlwh, score, cls):
         """Initialize new STrack instance."""
-        super().__init__()
         self._tlwh = np.asarray(self.tlbr_to_tlwh(tlwh[:-1]), dtype=np.float32)
         self.kalman_filter = None
         self.mean, self.covariance = None, None
@@ -112,9 +111,8 @@ class STrack(BaseTrack):
 
     def re_activate(self, new_track, frame_id, new_id=False):
         """Reactivates a previously lost track with a new detection."""
-        self.mean, self.covariance = self.kalman_filter.update(
-            self.mean, self.covariance, self.convert_coords(new_track.tlwh)
-        )
+        self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance,
+                                                               self.convert_coords(new_track.tlwh))
         self.tracklet_len = 0
         self.state = TrackState.Tracked
         self.is_activated = True
@@ -137,9 +135,8 @@ class STrack(BaseTrack):
         self.tracklet_len += 1
 
         new_tlwh = new_track.tlwh
-        self.mean, self.covariance = self.kalman_filter.update(
-            self.mean, self.covariance, self.convert_coords(new_tlwh)
-        )
+        self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance,
+                                                               self.convert_coords(new_tlwh))
         self.state = TrackState.Tracked
         self.is_activated = True
 
@@ -194,7 +191,7 @@ class STrack(BaseTrack):
 
     def __repr__(self):
         """Return a string representation of the BYTETracker object with start and end frames and track ID."""
-        return f"OT_{self.track_id}_({self.start_frame}-{self.end_frame})"
+        return f'OT_{self.track_id}_({self.start_frame}-{self.end_frame})'
 
 
 class BYTETracker:
@@ -277,7 +274,7 @@ class BYTETracker:
         strack_pool = self.joint_stracks(tracked_stracks, self.lost_stracks)
         # Predict the current location with KF
         self.multi_predict(strack_pool)
-        if hasattr(self, "gmc") and img is not None:
+        if hasattr(self, 'gmc') and img is not None:
             warp = self.gmc.apply(img, dets)
             STrack.multi_gmc(strack_pool, warp)
             STrack.multi_gmc(unconfirmed, warp)
@@ -351,8 +348,7 @@ class BYTETracker:
             self.removed_stracks = self.removed_stracks[-999:]  # clip remove stracks to 1000 maximum
         return np.asarray(
             [x.tlbr.tolist() + [x.track_id, x.score, x.cls, x.idx] for x in self.tracked_stracks if x.is_activated],
-            dtype=np.float32,
-        )
+            dtype=np.float32)
 
     def get_kalmanfilter(self):
         """Returns a Kalman filter object for tracking bounding boxes."""
@@ -374,19 +370,9 @@ class BYTETracker:
         """Returns the predicted tracks using the YOLOv8 network."""
         STrack.multi_predict(tracks)
 
-    @staticmethod
-    def reset_id():
+    def reset_id(self):
         """Resets the ID counter of STrack."""
         STrack.reset_id()
-
-    def reset(self):
-        """Reset tracker."""
-        self.tracked_stracks = []  # type: list[STrack]
-        self.lost_stracks = []  # type: list[STrack]
-        self.removed_stracks = []  # type: list[STrack]
-        self.frame_id = 0
-        self.kalman_filter = self.get_kalmanfilter()
-        self.reset_id()
 
     @staticmethod
     def joint_stracks(tlista, tlistb):

@@ -19,75 +19,66 @@
 #endif
 
 
-enum MODEL_TYPE
-{
+enum MODEL_TYPE {
     //FLOAT32 MODEL
-    YOLO_DETECT_V8 = 1,
-    YOLO_POSE = 2,
-    YOLO_CLS = 3,
-
-    //FLOAT16 MODEL
-    YOLO_DETECT_V8_HALF = 4,
+    YOLO_ORIGIN_V5 = 0,
+    YOLO_ORIGIN_V8 = 1,//only support v8 detector currently
+    YOLO_POSE_V8 = 2,
+    YOLO_CLS_V8 = 3,
+    YOLO_ORIGIN_V8_HALF = 4,
     YOLO_POSE_V8_HALF = 5,
+    YOLO_CLS_V8_HALF = 6
 };
 
 
-typedef struct _DL_INIT_PARAM
-{
-    std::string modelPath;
-    MODEL_TYPE modelType = YOLO_DETECT_V8;
-    std::vector<int> imgSize = { 640, 640 };
-    float rectConfidenceThreshold = 0.6;
+typedef struct _DCSP_INIT_PARAM {
+    std::string ModelPath;
+    MODEL_TYPE ModelType = YOLO_ORIGIN_V8;
+    std::vector<int> imgSize = {640, 640};
+    float RectConfidenceThreshold = 0.6;
     float iouThreshold = 0.5;
-    int	keyPointsNum = 2;//Note:kpt number for pose
-    bool cudaEnable = false;
-    int logSeverityLevel = 3;
-    int intraOpNumThreads = 1;
-} DL_INIT_PARAM;
+    bool CudaEnable = false;
+    int LogSeverityLevel = 3;
+    int IntraOpNumThreads = 1;
+} DCSP_INIT_PARAM;
 
 
-typedef struct _DL_RESULT
-{
+typedef struct _DCSP_RESULT {
     int classId;
     float confidence;
     cv::Rect box;
-    std::vector<cv::Point2f> keyPoints;
-} DL_RESULT;
+} DCSP_RESULT;
 
 
-class YOLO_V8
-{
+class DCSP_CORE {
 public:
-    YOLO_V8();
+    DCSP_CORE();
 
-    ~YOLO_V8();
+    ~DCSP_CORE();
 
 public:
-    char* CreateSession(DL_INIT_PARAM& iParams);
+    char *CreateSession(DCSP_INIT_PARAM &iParams);
 
-    char* RunSession(cv::Mat& iImg, std::vector<DL_RESULT>& oResult);
+    char *RunSession(cv::Mat &iImg, std::vector<DCSP_RESULT> &oResult);
 
-    char* WarmUpSession();
+    char *WarmUpSession();
 
     template<typename N>
-    char* TensorProcess(clock_t& starttime_1, cv::Mat& iImg, N& blob, std::vector<int64_t>& inputNodeDims,
-        std::vector<DL_RESULT>& oResult);
-
-    char* PreProcess(cv::Mat& iImg, std::vector<int> iImgSize, cv::Mat& oImg);
+    char *TensorProcess(clock_t &starttime_1, cv::Mat &iImg, N &blob, std::vector<int64_t> &inputNodeDims,
+                        std::vector<DCSP_RESULT> &oResult);
 
     std::vector<std::string> classes{};
 
 private:
     Ort::Env env;
-    Ort::Session* session;
+    Ort::Session *session;
     bool cudaEnable;
     Ort::RunOptions options;
-    std::vector<const char*> inputNodeNames;
-    std::vector<const char*> outputNodeNames;
+    std::vector<const char *> inputNodeNames;
+    std::vector<const char *> outputNodeNames;
 
     MODEL_TYPE modelType;
     std::vector<int> imgSize;
     float rectConfidenceThreshold;
     float iouThreshold;
-    float resizeScales;//letterbox scale
 };

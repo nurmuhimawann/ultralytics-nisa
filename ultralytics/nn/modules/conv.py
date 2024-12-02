@@ -7,21 +7,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-__all__ = (
-    "Conv",
-    "Conv2",
-    "LightConv",
-    "DWConv",
-    "DWConvTranspose2d",
-    "ConvTranspose",
-    "Focus",
-    "GhostConv",
-    "ChannelAttention",
-    "SpatialAttention",
-    "CBAM",
-    "Concat",
-    "RepConv",
-)
+__all__ = ('Conv', 'Conv2', 'LightConv', 'DWConv', 'DWConvTranspose2d', 'ConvTranspose', 'Focus', 'GhostConv',
+           'ChannelAttention', 'SpatialAttention', 'CBAM', 'Concat', 'RepConv', 'SqueezeExcite', 'DepthwiseSeparableConv')
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -33,9 +20,46 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     return p
 
 
+class SqueezeExcite(nn.Module):
+    """Squeeze-and-Excitation layer."""
+
+    def __init__(self, c1, reduction_ratio=0.25, act=True):
+        super(SqueezeExcite, self).__init__()
+        c2 = max(1, int(c1 * reduction_ratio))
+        # Using the Conv block with the format you provided
+        self.conv_reduce = Conv(c1, c2, k=1, act=act)
+        self.conv_expand = Conv(c2, c1, k=1, act=act)
+        self.gate_activation = nn.Sigmoid()
+
+    def forward(self, x):
+        # Spatially average the input tensor along the dimensions HxW
+        x_se = x.mean((2, 3), keepdim=True)
+        print(f'after mean {x_se.shape}')
+        x_se = self.conv_reduce(x_se)
+        print(f'conv reduce {x_se.shape}')
+        x_se = self.conv_expand(x_se)
+        print(f'conv expand {x_se.shape}')
+        
+        return x * self.gate_activation(x_se)
+
+class DepthwiseSeparableConv(nn.Module):
+    """ DepthwiseSeparable block
+    """
+    def __init__(self, c1, c2, k=3, s=1, p=None, g=1, d=1, act=True):
+        super(DepthwiseSeparableConv, self).__init__()
+        
+        # Using the Conv block for depthwise and pointwise convolutions
+        self.conv_dw = Conv(c1, c1, k=k, s=s, p=p, g=c1, d=d, act=act)
+        self.conv_pw = Conv(c1, c2, k=1, act=act)
+
+    def forward(self, x):
+        x = self.conv_dw(x)
+        x = self.conv_pw(x)
+        return x
+
+
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
-
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -74,9 +98,9 @@ class Conv2(Conv):
         """Fuse parallel convolutions."""
         w = torch.zeros_like(self.conv.weight.data)
         i = [x // 2 for x in w.shape[2:]]
-        w[:, :, i[0] : i[0] + 1, i[1] : i[1] + 1] = self.cv2.weight.data.clone()
+        w[:, :, i[0]:i[0] + 1, i[1]:i[1] + 1] = self.cv2.weight.data.clone()
         self.conv.weight.data += w
-        self.__delattr__("cv2")
+        self.__delattr__('cv2')
         self.forward = self.forward_fuse
 
 
@@ -116,7 +140,6 @@ class DWConvTranspose2d(nn.ConvTranspose2d):
 
 class ConvTranspose(nn.Module):
     """Convolution transpose 2d layer."""
-
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=2, s=2, p=0, bn=True, act=True):
@@ -179,7 +202,6 @@ class RepConv(nn.Module):
     This module is used in RT-DETR.
     Based on https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py
     """
-
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=3, s=1, p=1, g=1, d=1, act=True, bn=False, deploy=False):
@@ -230,7 +252,7 @@ class RepConv(nn.Module):
             beta = branch.bn.bias
             eps = branch.bn.eps
         elif isinstance(branch, nn.BatchNorm2d):
-            if not hasattr(self, "id_tensor"):
+            if not hasattr(self, 'id_tensor'):
                 input_dim = self.c1 // self.g
                 kernel_value = np.zeros((self.c1, input_dim, 3, 3), dtype=np.float32)
                 for i in range(self.c1):
@@ -248,31 +270,29 @@ class RepConv(nn.Module):
 
     def fuse_convs(self):
         """Combines two convolution layers into a single layer and removes unused attributes from the class."""
-        if hasattr(self, "conv"):
+        if hasattr(self, 'conv'):
             return
         kernel, bias = self.get_equivalent_kernel_bias()
-        self.conv = nn.Conv2d(
-            in_channels=self.conv1.conv.in_channels,
-            out_channels=self.conv1.conv.out_channels,
-            kernel_size=self.conv1.conv.kernel_size,
-            stride=self.conv1.conv.stride,
-            padding=self.conv1.conv.padding,
-            dilation=self.conv1.conv.dilation,
-            groups=self.conv1.conv.groups,
-            bias=True,
-        ).requires_grad_(False)
+        self.conv = nn.Conv2d(in_channels=self.conv1.conv.in_channels,
+                              out_channels=self.conv1.conv.out_channels,
+                              kernel_size=self.conv1.conv.kernel_size,
+                              stride=self.conv1.conv.stride,
+                              padding=self.conv1.conv.padding,
+                              dilation=self.conv1.conv.dilation,
+                              groups=self.conv1.conv.groups,
+                              bias=True).requires_grad_(False)
         self.conv.weight.data = kernel
         self.conv.bias.data = bias
         for para in self.parameters():
             para.detach_()
-        self.__delattr__("conv1")
-        self.__delattr__("conv2")
-        if hasattr(self, "nm"):
-            self.__delattr__("nm")
-        if hasattr(self, "bn"):
-            self.__delattr__("bn")
-        if hasattr(self, "id_tensor"):
-            self.__delattr__("id_tensor")
+        self.__delattr__('conv1')
+        self.__delattr__('conv2')
+        if hasattr(self, 'nm'):
+            self.__delattr__('nm')
+        if hasattr(self, 'bn'):
+            self.__delattr__('bn')
+        if hasattr(self, 'id_tensor'):
+            self.__delattr__('id_tensor')
 
 
 class ChannelAttention(nn.Module):
@@ -296,7 +316,7 @@ class SpatialAttention(nn.Module):
     def __init__(self, kernel_size=7):
         """Initialize Spatial-attention module with kernel size argument."""
         super().__init__()
-        assert kernel_size in (3, 7), "kernel size must be 3 or 7"
+        assert kernel_size in (3, 7), 'kernel size must be 3 or 7'
         padding = 3 if kernel_size == 7 else 1
         self.cv1 = nn.Conv2d(2, 1, kernel_size, padding=padding, bias=False)
         self.act = nn.Sigmoid()
